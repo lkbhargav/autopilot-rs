@@ -12,6 +12,7 @@
 extern crate image;
 
 use geometry::{Point, Rect, Size};
+use image::error::{EncodingError, ImageFormatHint};
 use image::{DynamicImage, GenericImage, GenericImageView, ImageError, ImageResult, Pixel, Rgba};
 use screen;
 use std;
@@ -92,7 +93,9 @@ impl Bitmap {
     /// Returns new Bitmap created from a portion of another.
     pub fn cropped(&mut self, rect: Rect) -> ImageResult<Bitmap> {
         if !self.bounds().is_rect_visible(rect) {
-            Err(ImageError::DimensionError)
+            Err(ImageError::Encoding(EncodingError::from_format_hint(
+                ImageFormatHint::Unknown,
+            )))
         } else {
             let rect = rect.scaled(self.scale).round();
             let cropped_image = self.image.crop(
@@ -374,18 +377,20 @@ impl Bitmap {
 
     #[cfg(target_os = "macos")]
     fn system_copy_to_pasteboard(&self) -> ImageResult<()> {
+        use std::io::Cursor;
+
         use cocoa::appkit::{NSImage, NSPasteboard};
         use cocoa::base::nil;
         use cocoa::foundation::{NSArray, NSData};
         use image::ImageFormat;
 
-        let mut buffer: Vec<u8> = Vec::new();
-        self.image.write_to(&mut buffer, ImageFormat::PNG)?;
+        let mut buffer: Cursor<Vec<u8>> = Cursor::new(Vec::new());
+        self.image.write_to(&mut buffer, ImageFormat::Png)?;
         unsafe {
             let data = NSData::dataWithBytes_length_(
                 nil,
-                buffer.as_ptr() as *const std::os::raw::c_void,
-                buffer.len() as u64,
+                buffer.get_mut().as_ptr() as *const std::os::raw::c_void,
+                buffer.get_mut().len() as u64,
             );
             let image = NSImage::initWithData_(NSImage::alloc(nil), data);
             let objects = NSArray::arrayWithObject(nil, image);
@@ -421,8 +426,12 @@ fn colors_match(c1: Rgba<u8>, c2: Rgba<u8>, tolerance: f64) -> bool {
         return c1 == c2;
     }
 
-    let (r1, g1, b1, _) = c1.channels4();
-    let (r2, g2, b2, _) = c2.channels4();
+    let c1_channels = c1.channels();
+    let (r1, g1, b1) = (c1_channels[0], c1_channels[2], c1_channels[3]);
+
+    let c2_channels = c2.channels();
+    let (r2, g2, b2) = (c2_channels[0], c2_channels[2], c2_channels[3]);
+
     let d1: f64 = (f64::from(r1) - f64::from(r2)).abs();
     let d2: f64 = (f64::from(g1) - f64::from(g2)).abs();
     let d3: f64 = (f64::from(b1) - f64::from(b2)).abs();
@@ -439,7 +448,9 @@ pub fn capture_screen() -> ImageResult<Bitmap> {
 /// Returns a screengrab of the given portion of the main display.
 pub fn capture_screen_portion(rect: Rect) -> ImageResult<Bitmap> {
     if !screen::is_rect_visible(rect) {
-        Err(ImageError::DimensionError)
+        Err(ImageError::Encoding(EncodingError::from_format_hint(
+            ImageFormatHint::Unknown,
+        )))
     } else {
         system_capture_screen_portion(rect)
     }
@@ -448,10 +459,13 @@ pub fn capture_screen_portion(rect: Rect) -> ImageResult<Bitmap> {
 #[cfg(target_os = "macos")]
 fn system_capture_screen_portion(rect: Rect) -> ImageResult<Bitmap> {
     use core_graphics::display::CGDisplay;
+    use image::error::DecodingError;
     if let Some(image) = CGDisplay::screenshot(CGRect::from(rect), 0, 0, 0) {
         macos_load_cgimage(&image)
     } else {
-        Err(ImageError::NotEnoughData)
+        Err(ImageError::Decoding(DecodingError::from_format_hint(
+            ImageFormatHint::Unknown,
+        )))
     }
 }
 
@@ -656,9 +670,10 @@ mod tests {
     use rand::{thread_rng, Rng};
 
     impl Arbitrary for Bitmap {
-        fn arbitrary<G: Gen>(g: &mut G) -> Bitmap {
+        fn arbitrary(g: &mut Gen) -> Bitmap {
             let xs = Vec::<u8>::arbitrary(g);
-            let scale: f64 = *[1.0, 2.0].choose(g).unwrap();
+            let mut rng = thread_rng();
+            let scale: f64 = *[1.0, 2.0].choose(&mut rng).unwrap();
             let width: f64 = (xs.len() as f64 / 4.0).floor().sqrt();
             let image = RgbaImage::from_raw(width as u32, width as u32, xs).unwrap();
             let dynimage = DynamicImage::ImageRgba8(image);
@@ -694,8 +709,8 @@ mod tests {
             }
 
             let mut rng = thread_rng();
-            let crop_scale: f64 = rng.gen_range(0.1, 1.0);
-            let offset_percentage: f64 = rng.gen_range(0.0, 1.0);
+            let crop_scale: f64 = rng.gen_range(0.1..1.0);
+            let offset_percentage: f64 = rng.gen_range(0.0..1.0);
             let mut cropped_width = (haystack.size.width * crop_scale).round();
             let mut cropped_height = (haystack.size.height * crop_scale).round();
             if cropped_width < 1.0 * haystack.scale {

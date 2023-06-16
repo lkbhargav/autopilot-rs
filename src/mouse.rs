@@ -163,8 +163,12 @@ impl From<Button> for CGMouseButton {
 fn system_move_to(point: Point) {
     let point = CGPoint::from(point);
     let source = CGEventSource::new(HIDSystemState).unwrap();
-    let event =
-        CGEvent::new_mouse_event(source, CGEventType::MouseMoved, point, CGMouseButton::Left);
+    let event = CGEvent::new_mouse_event(
+        source.clone(),
+        CGEventType::MouseMoved,
+        point,
+        CGMouseButton::Left,
+    );
     event.unwrap().post(CGEventTapLocation::HID);
 }
 
@@ -389,8 +393,8 @@ mod tests {
         let scale = screen::scale();
         let mut rng = thread_rng();
         for _ in 0..100 {
-            let x: f64 = rng.gen_range(0.0, size.width - 1.0);
-            let y: f64 = rng.gen_range(0.0, size.height - 1.0);
+            let x: f64 = rng.gen_range(0.0..size.width - 1.0);
+            let y: f64 = rng.gen_range(0.0..size.height - 1.0);
             let target = round_pt_nearest_hundredth(Point::new(x, y));
             mouse::move_to(target).expect("mouse::move_to call failed");
             std::thread::sleep(std::time::Duration::from_millis(10));

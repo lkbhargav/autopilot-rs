@@ -145,7 +145,7 @@ pub fn type_string(string: &str, flags: &[Flag], wpm: f64, noise: f64) {
     for c in string.chars() {
         let tolerance = (noise * ms_per_character as f64).round() as u64;
         let noise = if tolerance > 0 {
-            rand::thread_rng().gen_range(0, tolerance)
+            rand::thread_rng().gen_range(0..tolerance)
         } else {
             0
         };
@@ -535,10 +535,10 @@ fn system_toggle<T: KeyCodeConvertible>(
     flags: &[Flag],
     modifier_delay_ms: u64,
 ) {
-    use winapi::um::winuser::{
-        SendInput, INPUT, INPUT_u, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE,
-    };
     use std::mem::size_of;
+    use winapi::um::winuser::{
+        INPUT_u, SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE,
+    };
 
     for &flag in flags.iter() {
         win_send_key_event(WinKeyCode::from(flag), down, modifier_delay_ms);
