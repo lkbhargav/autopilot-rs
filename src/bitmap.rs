@@ -471,6 +471,7 @@ fn system_capture_screen_portion(rect: Rect) -> ImageResult<Bitmap> {
 
 #[cfg(windows)]
 fn system_capture_screen_portion(rect: Rect) -> ImageResult<Bitmap> {
+    use image::error::DecodingError;
     use winapi::ctypes::c_void;
     use winapi::shared::minwindef::DWORD;
     use winapi::shared::windef::HGDIOBJ;
@@ -508,7 +509,9 @@ fn system_capture_screen_portion(rect: Rect) -> ImageResult<Bitmap> {
         })
     };
     if screen.is_null() {
-        return Err(ImageError::NotEnoughData);
+        return Err(ImageError::Decoding(DecodingError::from_format_hint(
+            ImageFormatHint::Unknown,
+        )));
     }
 
     // Get screen data in display device context.
@@ -550,7 +553,9 @@ fn system_capture_screen_portion(rect: Rect) -> ImageResult<Bitmap> {
                 SRCCOPY,
             ) == 0
         {
-            return Err(ImageError::NotEnoughData);
+            return Err(ImageError::Decoding(DecodingError::from_format_hint(
+                ImageFormatHint::Unknown,
+            )));
         }
     };
 
@@ -570,6 +575,7 @@ fn system_capture_screen_portion(rect: Rect) -> ImageResult<Bitmap> {
 
 #[cfg(target_os = "linux")]
 fn system_capture_screen_portion(rect: Rect) -> ImageResult<Bitmap> {
+    use image::error::DecodingError;
     internal::X_MAIN_DISPLAY.with(|display| {
         let scaled_rect = rect.scaled(screen::scale());
         let root_window = unsafe {
@@ -595,7 +601,9 @@ fn system_capture_screen_portion(rect: Rect) -> ImageResult<Bitmap> {
             )
         };
         if image_ptr.is_null() {
-            return Err(ImageError::NotEnoughData);
+            return Err(ImageError::Decoding(DecodingError::from_format_hint(
+                ImageFormatHint::Unknown,
+            )));
         }
         let image = unsafe { **image_ptr };
         let bytes_per_pixel = image.bits_per_pixel / 8;
